@@ -1,5 +1,3 @@
-//I'm going to need 2 different versions. One using LittleFS and one using EEPROM to see which is better
-
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #ifdef ESP32
@@ -18,36 +16,21 @@
 
 #include <ESP8266TimerInterrupt.h>
 
+// Project specefic includes
 #include "DevConfigData.h"
 #include "HtmlRequests.h"
 
+//Sketch specefic data types
 
-AsyncWebServer server(80);
-
-//handle this better
-String inputMessageParm1 = "";
-
-String configWiFiSsid = "";
-String configWiFiAuth = "";
-String configEspHostname = "";
-extern bool configSaved;
-
-//===================================
-//reset counting stuff to do a device config and device clear
+//Data to be saved to the RTC RAM
+//This holds Wifi state data and a count of "interrupted boots" 
+//for temporary mode overrides
 typedef struct {
   unsigned int unhandledResetCount;
   WiFiState state;
 } devRtcData;
 
-// Init ESP8266 timer 1
-ESP8266Timer ITimer;
-
-RTCMemory<devRtcData> rtcMemIface;
-DevConfigData devConfig;
-
-//may not be needed with the ability to detach my ISR.
-bool rtcDataFlag = false;
-
+//used to direct behavior based on the state of the device.
 enum devOpMode {
   staDevice, //regular mode. Device is in station mode, it do the normal device functions
   staConfig, //"station mode" meanin on the configured wifi network, but boots to server the configuration pages to allow config updates
@@ -57,38 +40,39 @@ enum devOpMode {
 };
 
 
+//globals
+AsyncWebServer server(80);
 
+// Init ESP8266 timer 1
+ESP8266Timer ITimer;
+
+RTCMemory<devRtcData> rtcMemIface;
+DevConfigData devConfig;
+
+devOpMode BootMode;
+
+
+
+//
+// Timer ISR. 
+// See ReadMe for design discussion.
+// This timer interrupt acts as a one-shot to clear the reset count
+// if the boot progresses far enough to count as booted.
+//
 void IRAM_ATTR TimerHandler()
 {
-  if (!rtcDataFlag){
-    devRtcData* myRtcData = rtcMemIface.getData();
-    myRtcData->unhandledResetCount = 0;
-    rtcMemIface.save();
-    rtcDataFlag = true;
-    timer1_disable(); //this might be very, very bad juju.
-  }
-}
-
-
-devOpMode commonInit(){
-  Serial.println("Mount LittleFS");
-  if (!LittleFS.begin()) {
-    Serial.println("LittleFS mount failed");
-    return errorNoFs;
-  }
-  if (devConfig.Begin("/config.json")){
-    Serial.println ("config loaded");
-    return staDevice;
-  }
-  //There is an FS so that's OK, but no config.
-  return apConfig;
+  devRtcData* myRtcData = rtcMemIface.getData();
+  myRtcData->unhandledResetCount = 0;
+  rtcMemIface.save();
+  //This may be bad, but it seems to work OK for now.
+  timer1_disable();
 }
 
 //no wifi info, need to start in AP mode
 void setupNewConfigMode()
 {
   //setup softAP mode
-  configEspHostname = String("config_") + WiFi.hostname().c_str();
+  String configEspHostname = String("config_") + WiFi.hostname().c_str();
   WiFi.softAPConfig(IPAddress(192,168,30,1), IPAddress(0,0,0,0), IPAddress(255,255,255,0));
   Serial.print("AP hostname: ");
   Serial.println(configEspHostname);
@@ -168,27 +152,29 @@ void devModeEnd(devRtcData* data) {
 }
 
 
-void setupDevMode(devRtcData* data)
+void setupDevMode()
 {
-  DevModeWifi(data);
+  DevModeWifi(rtcMemIface.getData());
 }
 
-void setup() {
-  devOpMode BootMode;
-  // I may want to make the mode specefic setups handled via a class factory.
-  // Why? Just to practice it.
-  //note that getting LittleFS running is mandadory for all modes and 
-  //trying to load the config is common for all modes.
-  //Note: Not sure how LittleFS impacts battery use.
-  Serial.begin(115200);
+//
+// There are some common steps needed by all boot modes. Those get performed here.
+//
+bool commonInit(){
+  devRtcData* myRtcData = rtcMemIface.getData();
   ITimer.attachInterruptInterval(750000, TimerHandler);
-  delay(20);
-  Serial.println("Start setup");
-  rst_info *rinfo;
-  rinfo = ESP.getResetInfoPtr();
-  Serial.println(String("ResetInfo.reason = ") + (*rinfo).reason);
-  //getCycleCount
-  //do RTC stuff here.
+  Serial.println("Mount LittleFS");
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS mount failed");
+    BootMode =  errorNoFs;
+    return false;
+  }
+  if (devConfig.Begin("/config.json")){
+    Serial.println ("config loaded");
+    BootMode =  staDevice;
+  }
+  //There is an FS so that's OK, but no config.
+  BootMode =  apConfig;
   //
   // Fetch data from RTC memory
   //
@@ -197,8 +183,8 @@ void setup() {
     Serial.println("No RTC data");
     //need error recovery...
   }
-  devRtcData* myRtcData = rtcMemIface.getData();
-  //inc the count and save back to RTC RAM
+  
+  //increment the count and save back to RTC RAM
   Serial.print("reset count: ");
   Serial.println(myRtcData->unhandledResetCount);
   myRtcData->unhandledResetCount += 1;
@@ -207,17 +193,16 @@ void setup() {
   switch (myRtcData->unhandledResetCount) {
     case 2:
       Serial.println("reconfig on configed network");
-      BootMode = commonInit();
       if (BootMode == staDevice) {
         BootMode = staConfig;
+      } else {
+        //just go into normal config mode.
+        BootMode = apConfig;
       }
       break;
     case 3:
       Serial.println("return to AP mode, keep config");
-      BootMode = commonInit();
-      if (BootMode == staDevice) {
-        BootMode = apConfig;
-      }
+      BootMode = apConfig;
       break;
     case 4:
       Serial.println("\"factory reset\"");
@@ -227,16 +212,30 @@ void setup() {
       // Maybe make this call the code to get config data and set mode here.
       // for now just set normal mode and let code below sort things out.
       Serial.println("normal boot");
-      BootMode = commonInit();
+      BootMode = staDevice;
       break;
   }
+  return true;
+}
+
+void setup() {
+  // I may want to make the mode specefic setups handled via a class factory.
+  // Why? Just to practice it.
+  //note that getting LittleFS running is mandadory for all modes and 
+  //trying to load the config is common for all modes.
+  //Note: Not sure how LittleFS impacts battery use.
+  Serial.begin(115200);
+  delay(20);
+  Serial.println("Start setup");
+
+  commonInit();
 
   switch (BootMode) {
     case staConfig:
       setupReconfigMode();
       break;
     case staDevice:
-      setupDevMode(myRtcData);
+      setupDevMode();
       break;
     case apConfig:
       setupNewConfigMode();
@@ -246,25 +245,8 @@ void setup() {
       break;
 
   }
-
-
-/*
-  Serial.println("Mount LittleFS");
-  if (!LittleFS.begin()) {
-    Serial.println("LittleFS mount failed");
-    return;
-  }
-  //init the config object:
-  if (devConfig.Begin("/config.json")){
-    Serial.println ("config loaded");
-    setupDevMode();
-
-  } else {
-    setupNewConfigMode();
-  }
-*/
 }
 
 void loop() {
-
+// check BootMode and do the right loop required based on that.
 }
