@@ -1,11 +1,21 @@
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
 #include <LittleFS.h>
 #include "DevConfigData.h"
 
 
+// 
+JsonDocument jsonConfig;
 
+//need a better way to manage config keys
+//these need to be part of the setup of a normal boot
+//and the HTML requests. 
+/*
+ssid
+pw
+name
+
+*/
 
 bool DevConfigData::Begin (String filePath)
 {
@@ -35,57 +45,40 @@ bool DevConfigData::loadConfigData()
 
   configFile.readBytes(configBuf.get(), size);
   configFile.close();
-  JsonDocument configData;
-  auto error = deserializeJson(configData, configBuf.get());
+  auto error = deserializeJson(jsonConfig, configBuf.get());
   if (error) {
     Serial.println("Failed to parse config file");
     Serial.println(error.f_str());
     return false;
   }
-  //I should have my object now
-  String configWiFiSsid = configData["ssid"];
-  setConfigSsid(configData["ssid"]);
-  String configWifiPw = configData["pw"];
-  setConfigWifiPw(configData["pw"]);
-
-  String configDevHostname = configData["name"];
-  setConfigDevHostname(configData["name"]);
-
-  Serial.println("SSID " + configWiFiSsid + ", PW " + configWifiPw + ", Hostname " + configDevHostname);
   return true;
 }
 
-bool DevConfigData::saveConfigData()
-{
-  String settings = "{\"ssid\":\"" + configWiFiSsid + "\",\"pw\":\"" + configWifiPw + "\",\"name\":\"" + configDevHostname + "\"}";
-  Serial.println(settings);
-  delay(1000);
+// Saves the configuration to a file
+bool DevConfigData::saveConfigData() {
+  // Delete existing file, otherwise the configuration is appended to the file
+  if (LittleFS.remove(configFilePath)) {
+    Serial.println("File deleted");
+  }
 
-  const int length = settings.length();
-  std::unique_ptr<char[]> configBuf(new char[length]);
-  //char* char_array = new char[length + 1];
-  strcpy(configBuf.get(), settings.c_str()); 
-  //writeFile("/config.json",configBuf.get());
-
-  Serial.println("Writing file");
+  // Open file for writing
   File file = LittleFS.open(configFilePath, "w");
   if (!file) {
     Serial.println("Failed to open file for writing");
     return false;
   }
-  bool writeStatus = file.print(settings);
-  if (writeStatus) {
-    Serial.println("File written");
-  } else {
-    Serial.println("Write failed");
+
+  // Serialize JSON to file
+  if (serializeJson(jsonConfig, file) == 0) {
+    Serial.println(F("Failed to write to file"));
   }
-  delay(1000);  // Make sure the CREATE and LASTWRITE times are different
+
+  // Close the file
   file.close();
-  return writeStatus;
+  return true;
 }
 
-
-
+/*
 //setters
 void DevConfigData::setConfigSsid(const String & devSsid)
 {
@@ -145,3 +138,4 @@ bool DevConfigData::clearConfig(){
     return false;
   }
 }
+*/

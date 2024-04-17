@@ -1,4 +1,8 @@
 
+#include <ArduinoJson.h>
+
+extern JsonDocument jsonConfig;
+
 /*
  * Initial "get it done" class for config data.
  * The idea is for the data to live in a JSON file in the filesystem portion of the 

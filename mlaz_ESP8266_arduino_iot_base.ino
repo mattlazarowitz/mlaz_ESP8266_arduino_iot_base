@@ -88,12 +88,12 @@ void setupReconfigMode()
 {
   //=================================
   //move all this to a wifo station mode func after testing?
-  WiFi.hostname(devConfig.getConfigDevHostname().c_str());
+  WiFi.hostname(static_cast<String>(jsonConfig["name"]).c_str());
   Serial.print("Connecting to ");
-  Serial.println(devConfig.getConfigSsid());
+  Serial.println(static_cast<String>(jsonConfig["ssid"]));
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(devConfig.getConfigSsid(), devConfig.getConfigWifiPw());
+  WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -116,15 +116,15 @@ void setupReconfigMode()
 //be done at the appropriate point in the sensor init, sensor read, data sent sequence.
 void DevModeWifi(devRtcData* data) {
   String SsidStr = (char*)data->state.state.fwconfig.ssid;
-  if(SsidStr.equals(devConfig.getConfigSsid())){
+  if(SsidStr.equals(static_cast<String>(jsonConfig["ssid"]))){
     if (!WiFi.resumeFromShutdown(data->state)) {
       // Failed to restore state, do a regular connect.
       WiFi.persistent(false); 
       //invalidate the state data in case we fail a regular connect too.
       data->state.state.fwconfig.ssid[0] = 0;
-      WiFi.hostname(devConfig.getConfigDevHostname().c_str());
+      WiFi.hostname(static_cast<String>(jsonConfig["ssid"]));
       WiFi.mode(WIFI_STA);
-      WiFi.begin(devConfig.getConfigSsid(), devConfig.getConfigWifiPw());
+      WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
     } 
   }
 

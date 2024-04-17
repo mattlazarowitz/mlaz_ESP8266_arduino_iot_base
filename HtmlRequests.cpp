@@ -36,21 +36,25 @@ String processor(const String& var)
   Serial.println(var);
 
   if (var == "SSID_PLACEHOLDER") {
-    Serial.print("returning ");
-    Serial.println(devConfig.getConfigSsid());
-    return devConfig.getConfigSsid();
+    if (jsonConfig.containsKey("ssid")) {
+      Serial.print("returning ");
+      Serial.println(static_cast<String>(jsonConfig["ssid"]));
+      return static_cast<String>(jsonConfig["ssid"]);
+    } 
   }
   if (var == "ESP_NAME_PLACEHOLDER") {
-    Serial.print("returning ");
-    Serial.println(devConfig.getConfigDevHostname());
-    return devConfig.getConfigDevHostname();
+    if (jsonConfig.containsKey("name")) {
+      Serial.print("returning ");
+      Serial.println(static_cast<String>(jsonConfig["name"]));
+      return static_cast<String>(jsonConfig["name"]);
+    }
   }
   if (var == "BLANK_WIFI_PASSWORD") {
     Serial.print("returning ");
-    if (devConfig.getConfigWifiPw().length() > 0) {
-      return "PW set";
-    } else {
-      return "No PW set";
+    if (jsonConfig.containsKey("pw")) {
+      if(static_cast<String>(jsonConfig["pw"]).length() > 0) {
+        return "PW set";
+      }
     }
   }
   if (var == "CONFIG_SAVED") {
@@ -84,7 +88,8 @@ void HandleConfigRequest(AsyncWebServerRequest *request) {
     inputMessage = request->getParam("SsidInput", true)->value();
     if (inputMessage.length() > 0) {
       //configWiFiSsid = inputMessage;
-      devConfig.setConfigSsid(inputMessage);
+      //devConfig.setConfigSsid(inputMessage);
+      jsonConfig["ssid"] = inputMessage;
     }
   }
   // GET input2 value on <ESP_IP>/get?input2=<inputMessage>
@@ -93,7 +98,8 @@ void HandleConfigRequest(AsyncWebServerRequest *request) {
     Serial.println("PwInput");
     inputMessage = request->getParam("PwInput", true)->value();
     //configWiFiAuth = inputMessage;
-    devConfig.setConfigWifiPw(inputMessage);
+    //devConfig.setConfigWifiPw(inputMessage);
+    jsonConfig["pw"] = inputMessage;
   }
   // GET input3 value on <ESP_IP>/get?input3=<inputMessage>
   if (request->hasParam("HostName", true)) {
@@ -103,7 +109,8 @@ void HandleConfigRequest(AsyncWebServerRequest *request) {
     if (inputMessage.length() > 0) {
       Serial.println("setting configEspHostname");
       //configEspHostname = inputMessage;
-      devConfig.setConfigDevHostname(inputMessage);
+      //devConfig.setConfigDevHostname(inputMessage);
+      jsonConfig["name"] = inputMessage;
     }
   }
   //request->send(LittleFS, "/index.htm", "text/html", false, processor);
@@ -133,7 +140,9 @@ void HandleClearRequest (AsyncWebServerRequest *request) {
   //TODO: Move to config object
   Serial.printf("Deleting config");
   //TODO check return status
-  devConfig.clearConfig();
+  //devConfig.clearConfig();
+  jsonConfig.clear();
+  //TODO:make sure config gets saved or config file is deleted.
   request->send(LittleFS, "/index.htm", "text/html", false, processor);
 }
 
