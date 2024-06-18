@@ -27,7 +27,7 @@ bool configSaved = false;
 
 
 //
-//    Webserverr HTML template processor/callback
+//    Webserver HTML template processor/callback
 //
 
 String processor(const String& var)
