@@ -16,11 +16,11 @@
 
 #include <ESP8266TimerInterrupt.h>
 
-// Project specefic includes
+// Project specific includes
 #include "DevConfigData.h"
 #include "HtmlRequests.h"
 
-//Sketch specefic data types
+//Sketch specific data types
 
 //Data to be saved to the RTC RAM
 //This holds Wifi state data and a count of "interrupted boots" 
@@ -33,7 +33,7 @@ typedef struct {
 //used to direct behavior based on the state of the device.
 enum devOpMode {
   staDevice, //regular mode. Device is in station mode, it do the normal device functions
-  staConfig, //"station mode" meanin on the configured wifi network, but boots to server the configuration pages to allow config updates
+  staConfig, //"station mode" meaning on the configured wifi network, but boots to server the configuration pages to allow config updates
   apConfig,  //AP mode config mode. Boot as an AP that can be connected to t in order to get to the config page that way. Config is not erased
   resetConfig, //erase the config settings, "factory reset"
   errorNoFs
@@ -87,7 +87,7 @@ void setupNewConfigMode()
 void setupReconfigMode()
 {
   //=================================
-  //move all this to a wifo station mode func after testing?
+  //move all this to a wifi station mode func after testing?
   WiFi.hostname(static_cast<String>(jsonConfig["name"]).c_str());
   Serial.print("Connecting to ");
   Serial.println(static_cast<String>(jsonConfig["ssid"]));
@@ -112,7 +112,7 @@ void setupReconfigMode()
 
 
 //regular mode
-//this cleans up setupDevMode() nad isolates the wifi stuff so it can 
+//this cleans up setupDevMode() and isolates the wifi stuff so it can 
 //be done at the appropriate point in the sensor init, sensor read, data sent sequence.
 void DevModeWifi(devRtcData* data) {
   String SsidStr = (char*)data->state.state.fwconfig.ssid;
