@@ -43,14 +43,14 @@ String buildReportItem(configItemData *configItem){
           configItem->displayName +
           " <td>%" +
           configItem->key +
-          "%><br>";
+          "%<br>";
     }
     //todo: make this prettier
         return "<tr><td>" +
           configItem->displayName +
           " set<td>%" +
           configItem->key +
-          "%><br>";
+          "%<br>";
 }
 
 int handleFormResponse(configItemData *configItem, JsonDocument &jsonConfig, AsyncWebServerRequest *request) {

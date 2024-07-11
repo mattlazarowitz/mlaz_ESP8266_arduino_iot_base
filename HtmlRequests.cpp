@@ -49,7 +49,7 @@ String processor(const String& var)
   if (var == "CONFIG_FIELDS") {
     return configFields;
   }
-  if (var == "REPORT_FILEDS"){
+  if (var == "REPORT_FIELDS"){
     return reportFields;
   }
   // The template item is likely a key.
@@ -177,8 +177,12 @@ void registerHtmlInterfaces()
   //they won't change so only do this once.
   for (configItemData item : configItems) {
     configFields = configFields + buildInputFormItem(&item);
-    reportFields + reportFields + buildReportItem(&item);
+    reportFields = reportFields + buildReportItem(&item);
   }
+  Serial.println("reporting built strings:");
+  Serial.println(configFields);
+  Serial.println();
+  Serial.println(reportFields);
   //configFields = tempStr1;
   //reportFields = tempStr2;
 

@@ -161,7 +161,9 @@ void setupDevMode()
 // There are some common steps needed by all boot modes. Those get performed here.
 //
 bool commonInit(){
-  devRtcData* myRtcData = rtcMemIface.getData();
+  //devRtcData* myRtcData = rtcMemIface.getData();
+  devRtcData* myRtcData = nullptr;
+  bool rtcInit;
   ITimer.attachInterruptInterval(750000, TimerHandler);
   Serial.println("Mount LittleFS");
   if (!LittleFS.begin()) {
@@ -172,48 +174,57 @@ bool commonInit(){
   if (devConfig.Begin("/config.json")){
     Serial.println ("config loaded");
     BootMode =  staDevice;
+  } else {
+    //There is an FS so that's OK, but no config.
+    BootMode =  apConfig;
   }
-  //There is an FS so that's OK, but no config.
-  BootMode =  apConfig;
   //
   // Fetch data from RTC memory
   //
-  if(!rtcMemIface.begin()){
+  rtcInit = rtcMemIface.begin();
+  if(!rtcInit){
     // probably the first boot after a power loss
     Serial.println("No RTC data");
     //need error recovery...
+    //This shouldn't be possible on an ESP8266 though.
+  } else {
+    Serial.println("reading RTC data");
+    myRtcData = rtcMemIface.getData();
   }
-  
-  //increment the count and save back to RTC RAM
-  Serial.print("reset count: ");
-  Serial.println(myRtcData->unhandledResetCount);
-  myRtcData->unhandledResetCount += 1;
-  rtcMemIface.save();
-  //now see if we hit any of the manual mode override thresholds
-  switch (myRtcData->unhandledResetCount) {
-    case 2:
-      Serial.println("reconfig on configed network");
-      if (BootMode == staDevice) {
-        BootMode = staConfig;
-      } else {
-        //just go into normal config mode.
+  if (myRtcData != nullptr) {
+    //increment the count and save back to RTC RAM
+    Serial.print("reset count: ");
+    Serial.println(myRtcData->unhandledResetCount);
+    myRtcData->unhandledResetCount += 1;
+    rtcMemIface.save();
+    //now see if we hit any of the manual mode override thresholds
+    switch (myRtcData->unhandledResetCount) {
+      case 2:
+        Serial.println("reconfig on configed network");
+        if (BootMode == staDevice) {
+          BootMode = staConfig;
+        } else {
+          //just go into normal config mode.
+          BootMode = apConfig;
+        }
+        break;
+      case 3:
+        Serial.println("return to AP mode, keep config");
         BootMode = apConfig;
-      }
-      break;
-    case 3:
-      Serial.println("return to AP mode, keep config");
-      BootMode = apConfig;
-      break;
-    case 4:
-      Serial.println("\"factory reset\"");
-      BootMode = resetConfig;
-      break;
-    default:
-      // Maybe make this call the code to get config data and set mode here.
-      // for now just set normal mode and let code below sort things out.
-      Serial.println("normal boot");
-      BootMode = staDevice;
-      break;
+        break;
+      case 4:
+        Serial.println("\"factory reset\"");
+        BootMode = resetConfig;
+        break;
+      default:
+        // Maybe make this call the code to get config data and set mode here.
+        // for now just set normal mode and let code below sort things out.
+        Serial.println("no override");
+        Serial.print("Boot mode: ");
+        Serial.println(BootMode);
+        //BootMode = staDevice;
+        break;
+    }
   }
   return true;
 }
