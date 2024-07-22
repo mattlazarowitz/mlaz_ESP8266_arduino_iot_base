@@ -1,24 +1,7 @@
-#include <Arduino.h>
-#include <ArduinoJson.h>
-#ifdef ESP32
-#include <WiFi.h>
-#include <AsyncTCP.h>
-#else
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
-#endif
-#include <ESPAsyncWebServer.h>
-#include <FS.h>
-#include <LittleFS.h>
-
-#include <RTCMemory.h>
-#include <include/WiFiState.h> // WiFiState structure details
-
-#include <ESP8266TimerInterrupt.h>
-
 // Project specific includes
-#include "DevConfigData.h"
+#include "configItems.h"
 #include "HtmlRequests.h"
+
 
 //Sketch specific data types
 
@@ -47,11 +30,27 @@ AsyncWebServer server(80);
 ESP8266Timer ITimer;
 
 RTCMemory<devRtcData> rtcMemIface;
-DevConfigData devConfig;
 
 devOpMode BootMode;
 
-
+//debug
+String bootModeToStr(devOpMode BootMode) {
+  switch (BootMode) {
+    case staDevice:
+      return "staDevice";
+    case staConfig:
+      return "staConfig";
+    case apConfig:
+      return "apConfig";
+    case resetConfig:
+      return "resetConfig";
+    case errorNoFs:
+      return "errorNoFs";
+    default:
+      break;
+  }
+  return "invalid boot mode";
+}
 
 //
 // Timer ISR. 
@@ -74,7 +73,7 @@ void setupNewConfigMode()
   //setup softAP mode
   String configEspHostname = String("config_") + WiFi.hostname().c_str();
   WiFi.softAPConfig(IPAddress(192,168,30,1), IPAddress(0,0,0,0), IPAddress(255,255,255,0));
-  Serial.print("AP hostname: ");
+  Serial.print(F("AP hostname: "));
   Serial.println(configEspHostname);
   WiFi.softAP(configEspHostname);
 
@@ -89,7 +88,7 @@ void setupReconfigMode()
   //=================================
   //move all this to a wifi station mode func after testing?
   WiFi.hostname(static_cast<String>(jsonConfig["name"]).c_str());
-  Serial.print("Connecting to ");
+  Serial.print(F("Connecting to "));
   Serial.println(static_cast<String>(jsonConfig["ssid"]));
 
   WiFi.mode(WIFI_STA);
@@ -97,12 +96,11 @@ void setupReconfigMode()
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    Serial.print(F("."));
   }
 
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
+  Serial.println();
+  Serial.println(F("WiFi connected\nIP address: "));
   Serial.println(WiFi.localIP());
   //========================================================
 
@@ -133,9 +131,8 @@ void DevModeWifi(devRtcData* data) {
     Serial.print(".");
   }
 
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
+  Serial.println();
+  Serial.println(F("WiFi connected\nIP address: "));
   Serial.println(WiFi.localIP());
 }
 
@@ -165,70 +162,90 @@ bool commonInit(){
   devRtcData* myRtcData = nullptr;
   bool rtcInit;
   ITimer.attachInterruptInterval(750000, TimerHandler);
-  Serial.println("Mount LittleFS");
+  Serial.println(F("Mount LittleFS"));
   if (!LittleFS.begin()) {
-    Serial.println("LittleFS mount failed");
+    Serial.println(F("LittleFS mount failed"));
     BootMode =  errorNoFs;
     return false;
   }
-  if (devConfig.Begin("/config.json")){
-    Serial.println ("config loaded");
-    BootMode =  staDevice;
+
+  if(loadConfigFile(CONFIG_FILE)) {
+    Serial.println (F("config loaded"));
+    BootMode =  staDevice; 
   } else {
     //There is an FS so that's OK, but no config.
     BootMode =  apConfig;
   }
+
+
   //
   // Fetch data from RTC memory
   //
   rtcInit = rtcMemIface.begin();
   if(!rtcInit){
     // probably the first boot after a power loss
-    Serial.println("No RTC data");
-    //need error recovery...
-    //This shouldn't be possible on an ESP8266 though.
+    Serial.println(F("No RTC data"));
+    // often happens if the CRC for the RTC RAM fails which is expected on a first boot. 
+    // System tries to restore from flash (which we don't use for this).
+    // If that fails, it does a reset of the data area which is what we want. 
+    // We can either reset or try tgoe begin again. 
+    // Go ahead and try to begin again. IF that fails, I think the best course of action is an
+    // error 'halt' and blink the onboard LED.
+    if (rtcMemIface.begin()){
+      myRtcData = rtcMemIface.getData();
+    }
   } else {
-    Serial.println("reading RTC data");
+    Serial.println(F("reading RTC data"));
     myRtcData = rtcMemIface.getData();
   }
   if (myRtcData != nullptr) {
     //increment the count and save back to RTC RAM
-    Serial.print("reset count: ");
+    Serial.print(F("reset count: "));
     Serial.println(myRtcData->unhandledResetCount);
     myRtcData->unhandledResetCount += 1;
     rtcMemIface.save();
     //now see if we hit any of the manual mode override thresholds
     switch (myRtcData->unhandledResetCount) {
       case 2:
-        Serial.println("reconfig on configed network");
+        Serial.println(F("reconfig on configed network"));
         if (BootMode == staDevice) {
           BootMode = staConfig;
         } else {
           //just go into normal config mode.
           BootMode = apConfig;
         }
+        blinkLed(2);
         break;
       case 3:
         Serial.println("return to AP mode, keep config");
         BootMode = apConfig;
+        blinkLed(3);
         break;
       case 4:
-        Serial.println("\"factory reset\"");
+        Serial.println(F("\"factory reset\""));
         BootMode = resetConfig;
         break;
       default:
         // Maybe make this call the code to get config data and set mode here.
         // for now just set normal mode and let code below sort things out.
-        Serial.println("no override");
-        Serial.print("Boot mode: ");
-        Serial.println(BootMode);
+        Serial.println(F("no override"));
+        Serial.print(F("Boot mode: "));
+        Serial.println(bootModeToStr(BootMode));
         //BootMode = staDevice;
+        blinkLed(4);
         break;
     }
   }
   return true;
 }
-
+void blinkLed(int blinks) {
+  for (int i = 0; i < blinks;i++) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(500);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(500);
+  }
+}
 void setup() {
   // I may want to make the mode specefic setups handled via a class factory.
   // Why? Just to practice it.
@@ -237,7 +254,8 @@ void setup() {
   //Note: Not sure how LittleFS impacts battery use.
   Serial.begin(115200);
   delay(20);
-  Serial.println("Start setup");
+  Serial.println(F("Start setup"));
+  pinMode(LED_BUILTIN, OUTPUT);
 
   commonInit();
 
@@ -251,8 +269,14 @@ void setup() {
     case apConfig:
       setupNewConfigMode();
       break;
+    case resetConfig:
+      //devConfig.clearConfig();
+      eraseConfig(CONFIG_FILE);
+      delay (1000);
+      ESP.restart();
+      delay (1000);
     default:
-      Serial.println("Invalid boot mode");
+      Serial.println(F("Invalid boot mode"));
       break;
 
   }

@@ -1,6 +1,8 @@
-**Currently non functional**
-Prior versions were for exploring the building blocks needed for this device. 
-This project will continue to be updated with experiments and prototypes until requirements are met.
+**Current State**
+Consider this as a beta.
+It builds, and basic testing is working.
+Currently IRAM usage is very high. If your device code is small, this version of the code might be OK to use. 
+
 
 Problem: There is a lack of examples of IOT devices that use the ESP-8266, use the Arduino framework, and are runtime configurable.
 
@@ -46,8 +48,7 @@ To facilitate this the device will do the following:
   - Store JSON and HTML data using the LittleFS file system
   - Use the reset button to signal mode change requests
   - Make use of the template processing capability in the ESPAsyncWebServer
-  - Encapsulate configuration options
-  - Configuration objects can be completely initialized by the constructor
+  - Define the options for the HTML form in a header file
   - Optional for power: Use wifi state saving and restoring to minimize radio power usage
   - Optional for power: Use the deep sleep capability of the ESP-8266
   - Optional for power: Infrastructure issue detection with longer sleep cycles
@@ -73,30 +74,17 @@ Additionally the sketch implementation will gather data from the sensors before 
 Additional profiling will be needed to see if the use of LittleFS has a noticeable impact on power usage or if there is an alternative non-volatile data store that may be more power efficient.
 
 **Current state:**
+Essentally a beta
 Mode selection via reset button has been prototyped
 Basic web server functionality has been tested and template mode is understood
 LittleFS has been tested and is mostly understood
 JSON has been tested and is understood at a basic level
-Configuration is being refactored.
-The prior experiment used a monolithic configuration object. In the process of experimenting, a solution where each item is its own object became obvious. 
-Design and coding of this object is now in progress. 
+HTML and configuration has been implemented as functional code for now.
+IRAM usage is very hign and there is not much room for device mode code.
+This version can be used for demonstration purposes.
 
-The object needs the following data:
-  - key name
-  - a display name for that key
-  - the actual configuration data
-  
-The object needs the following methods:
-  - a method inject an HTML entry that makes use of the display name and key name for set up the tags.
-    - this will be called from the callback the web server calls to fill out a template parameter.
-  - a method to read the form data that matches the key name.
-    - this will be called from the callback that handles the POST request
-  - a method to load its configuration data from the JSON data if it exists and is valid
-  - a method to commit its key and data to a JSON object
-  - a constructor that sets up the key name, the display name, and optionally, the data.
-
-A mechanism for ordering is needed for the config objects as the order their HTML injection method is called will determine the order of items on the configuration page.
-A mechanism for calling the correct callback to handle the post data is needed as well.
-Try a loop for post data first and see if the response time is acceptable. O(1) vs O(n^2) seems like a lot but n should never be more than maybe 15. The time savings from a lookup table may not be worth the code complexity.
-
-Readme will be updated as work progresses
+To Do:
+Reduce IRAM usage
+Evaluate what code can be made object oriented and if there is a clear advantage to converting it.
+Clean up debugging code
+Document/comment code.
