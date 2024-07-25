@@ -1,14 +1,6 @@
 //Moving HTML functions here to de-clutter the main sketch.
 //maybe put this into the header file?
 
-#include <Arduino.h>
-
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
-
-#include <ESPAsyncWebServer.h>
-#include <LittleFS.h>
-
 #include "htmlRequests.h"
 //#include "DevConfigData.h"
 #include "configItems.h"
@@ -114,16 +106,15 @@ void HandleConfigRequest(AsyncWebServerRequest *request) {
   // look through the config objects looking for the provided key
     //for (configItemData item : configItems) {
   for (int i = 0; i < std::size(configItems); i++) {
-      handleFormResponse(&configItems[i],
-      request);
+      //TODO: Figure out what to do with an item that isn't handled.
+      //If that happens, the implication is either a communications issue or an attack on the interface.
+      handleFormResponse(&configItems[i], request);
       Serial.println(F("HandleConfigRequest: reading back data:"));
       Serial.print(configItems[i].key);
       Serial.print(F(":"));
       String Test = configItems[i].value;
       Serial.println(Test);
-
     }
-  //request->send(LittleFS, "/index.htm", "text/html", false, processor);
   request->redirect("/");
 }
 

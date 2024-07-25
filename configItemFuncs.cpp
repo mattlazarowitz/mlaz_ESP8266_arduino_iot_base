@@ -2,12 +2,26 @@
 
 JsonDocument jsonConfig;
 
+//
+// buildInputFormItem
+// HTML input is handled via a form with multiple fields. 
+// This adds a field for the form section of the HTML as a table row.
+//
+// 1) Check if the field is for a protected item like a password.
+// 2) If not, build a row where the input type is text.
+// 3) If it is, build a row where the input type is a password.
+// 4) Return the string for the row to the caller.
+//
+// Parameter: *configItem - A pointer to a configItemData data structure.
+//    The structure contains the data needed to build the row.
+//
+// Returns HTLM string for a table row. 
+//
 String buildInputFormItem(configItemData *configItem){
     //<tr><td>{prettyName} <td><input type="text" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
-    //"<tr><td>%s <td><input type="text" name="%s" maxlength="%d" placeholder="%%%s%%"><br>"
-    //sprint needs a pre-defined buffer. The issue is with string inputs, it's hard to figure out a good
-    //compromse. 
-    //So while String concatination is syntactically messier, it seems to be the cleaner design.
+    // This could probably be done more 'cleanly' in terms of syntax with sprint_f but the manual buffer managment
+    // takes away from that. 
+    // So while String concatination is syntactically messier, it seems to be the cleaner design.
     if (!configItem->protect_pw) {
         return "<tr><td>" +
           configItem->displayName +
@@ -32,46 +46,72 @@ String buildInputFormItem(configItemData *configItem){
         "%\"><br>";
 }
 
+//
+// buildReportItem
+// Configured items are reported to the user in a table (to improve formatting).
+// This function builds a row for the table where each row is a separate configuration item.
+//
+// Parameter: *configItem - A pointer to a configItemData data structure.
+//    The structure contains the data needed to build the row.
+//
+// Returns HTLM string for a table row. 
+//
+
 String buildReportItem(configItemData *configItem){
-    //<tr><td>{prettyName} <td><input type="text" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
-    //"<tr><td>%s <td><input type="text" name="%s" maxlength="%d" placeholder="%%%s%%"><br>"
+    //<tr><td>{prettyName} <td>%{key}%<br>
     //sprint needs a pre-defined buffer. The issue is with string inputs, it's hard to figure out a good
     //compromse. 
     //So while String concatination is syntactically messier, it seems to be the cleaner design.
-    if (!configItem->protect_pw) {
-        return "<tr><td>" +
-          configItem->displayName +
-          " <td>%" +
-          configItem->key +
-          "%<br>";
-    }
-    //todo: make this prettier
-        return "<tr><td>" +
-          configItem->displayName +
-          " set<td>%" +
-          configItem->key +
-          "%<br>";
+    return "<tr><td>" +
+      configItem->displayName +
+      " <td>%" +
+      configItem->key +
+      "%<br>";
 }
 
-int handleFormResponse(configItemData *configItem, AsyncWebServerRequest *request) {
+// handleFormResponse
+// Check form data submitted to the webserver for a specific field and update the configuration item 
+// with the provided data.
+//
+// 1) check if the form data contains a parameter that matches the key of the provided configuration item
+// 2) Check that the parameter contains data.
+// 3) If the parameter contains data, update the configuration item with the value.
+//
+// Parameter: *configItem - A pointer to a configItemData data structure.
+// Parameter: *request - A pointer to the HTML request data provided by the webserver
+//
+// Return  True if the provided configuration item found a matcing parameter, false of not.
+// 
+bool handleFormResponse(configItemData *configItem, AsyncWebServerRequest *request) {
   Serial.print("handleFormResponse: ");
   if (request->hasParam(configItem->key, true)) {
-    //configSaved = false;
     Serial.println(configItem->key);
-    //String inputMessage = request->getParam(configItem->key, true)->value();
-    //char json_key[configItem->key.length()] = configItem->key.c_str();
-    //if (inputMessage.length() > 0) {
       if (request->getParam(configItem->key, true)->value().length() < configItem->maxLength){
       configItem->value = request->getParam(configItem->key, true)->value();
-      return 0;
+      return true;
     }
   }
-  return -1;
+  return false;
 }
 
 //
-// Design of this has become a bit subtle as parameters have been fleshed out.
-// Value strings need to be allowed to be empt
+// getItemValue
+// Provide a value string for both the report section and the placeholder in the input section.
+// Protected items must have a dummy string provided rather than the actual value.
+//
+// 1) Check the template variable provided by the webserver against the provided configuration item.
+// 2) If the item is a match, check if the item is protected.
+// 3) If it is not protected, set a reference to the stored value string.
+// 4) If it is protected, check if there is a stored value.
+// 5) If it is not emply, set a reference to a dummy string. 
+// 6) Return true if the reference was updated, false if the refernece isn't 'valid'.
+//
+// Parameter: templateVar - teh string for the template variabe from the HTML data to be replaced.
+// Parameter: configItem - A pointer to a configItemData data structure.
+// Parameter: valueString - The refernce to provide the text to use in place of the template variable.
+//
+// Returns True if valueString has been updated with approriate data. 
+//         False if the variable was not claimed.
 //
 bool getItemValue(String templateVar, configItemData *configItem, String& valueString){
     static const String dummyString = "********";
@@ -87,8 +127,6 @@ bool getItemValue(String templateVar, configItemData *configItem, String& valueS
         } else {
           if (configItem->value.length() > 0){
             Serial.println(F("returning dummy string"));
-            //todo: check if there is data or not and return an indicator
-            //return dummyString;
             valueString = dummyString;
           }
             return true;
@@ -97,16 +135,10 @@ bool getItemValue(String templateVar, configItemData *configItem, String& valueS
     return false;      
 }
 
-bool configToJson (configItemData *configItem, JsonDocument jsonConfig) {
-  //load stuff from config into config item
-  return true;
-}
-
-
-
-
-
-
+//
+// loadConfigFile
+// Attempt to read the provided filename and load the JSON data into jsonConfig
+//
 bool loadConfigFile(String configFileLoc)
 {
   Serial.println(F("Loading configuration"));
@@ -116,7 +148,7 @@ bool loadConfigFile(String configFileLoc)
   }
   File configFile = LittleFS.open(configFileLoc, "r");
   if (!configFile) {
-    Serial.println(F("devConfigData.loadConfigData: failed to read file"));
+    Serial.println(F("loadConfigData: failed to read file"));
     return false;
   }
   size_t size = configFile.size();
@@ -136,6 +168,10 @@ bool loadConfigFile(String configFileLoc)
   return true;
 }
 
+//
+// saveConfigFile
+// Attempt to save jsonConfig to the provided filename to flash.
+//
 bool saveConfigFile(String configFileLoc) {
   Serial.println(F("saveConfigFile"));
   // Delete existing file, otherwise the configuration is appended to the file
@@ -160,6 +196,10 @@ bool saveConfigFile(String configFileLoc) {
   return true;
 }
 
+//
+// saveConfigFile
+// Attempt to erase the provided configuration file. Used to reset the device.
+//
 bool eraseConfig (String configFileLoc) {
   //no data, we just go ahead and delete the config file
   //TODO: Move to config object

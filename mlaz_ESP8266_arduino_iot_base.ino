@@ -1,7 +1,9 @@
 // Project specific includes
 #include "configItems.h"
 #include "HtmlRequests.h"
-
+#include <include/WiFiState.h>
+#include <ESP8266TimerInterrupt.h>
+#include <RTCMemory.h>
 
 //Sketch specific data types
 
