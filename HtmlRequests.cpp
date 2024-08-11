@@ -1,9 +1,30 @@
-//Moving HTML functions here to de-clutter the main sketch.
-//maybe put this into the header file?
+/*
+MIT License
 
-#include "htmlRequests.h"
+Copyright (c) 2024 Matthew Lazarowitz
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+**/
+
+#include "htmlRequests.hpp"
 //#include "DevConfigData.h"
-#include "configItems.h"
+#include "configItems.hpp"
 
 //best way to do this?
 //extern DevConfigData devConfig;
@@ -14,55 +35,18 @@ extern JsonDocument jsonConfig;
 bool configSaved = false;
 
 
-configItemData configItems [] = CONFIG_ITEMS;
-//extern configItemData configItems [];
 String reportFields;
 //The complete list of config fields to be used for the %CONFIG_FIELDS% template
 String configFields;
 
-//
-// This might be better in configItems.cpp
-// but the data needed are globals here
-//
-//bool initValues (JsonDocument jsonConfig, configItemData *configItem) {
-bool initValues () {
-  Serial.println(F("init values"));
-  //load up the JSON file and prepare to save it.
-  for (int i = 0; i < std::size(configItems); i++) {
-    Serial.print(F("loading [\""));
-    Serial.print(configItems[i].key);
-    Serial.print(F("\"]:[\""));  
-    if (jsonConfig.containsKey(configItems[i].key)) {
-      configItems[i].value = static_cast<String>(jsonConfig[configItems[i].key]);
-      if (configItems[i].protect_pw) {
-        Serial.print(F("<protected PW>"));
-      } else {
-        Serial.print(configItems[i].value);
-      }
-      
-    } else {
-      Serial.print(F("<not found>"));
-    }
-    Serial.println(F("\"]"));
-  }
-  return true;
-}
-
-bool valuesToJson () {
-  Serial.println(F("valuesToJson"));
-  for (int i = 0; i < std::size(configItems); i++) {
-    jsonConfig[configItems[i].key] = configItems[i].value;
-  }
-  return saveConfigFile(CONFIG_FILE);
-}
-
+configurationItems configItems; //melm rename this once all functional code is encapsulated into this class.
 
 //
 //    Webserver HTML template processor/callback
 //
   
-String processor(const String& var)
-{   
+String processor(const String& var) {
+  String retVal;
   Serial.print(F("str processor: "));
   Serial.println(var);
 
@@ -80,51 +64,27 @@ String processor(const String& var)
   if (var == "REPORT_FIELDS"){
     return reportFields;
   }
-  // The template item is likely a key.
-  // Something like a hash table may have a O(1) while this loop is O(n)
-  // But the loop is simpler and n is very small.
-  //for (configItemData item : configItems) {
-  for (int i = 0; i < std::size(configItems); i++) {
-    //not any predefined fields, need to see if this is a user defined value
-    //String retval = getItemValue(var, &item);
-    //do this to end the loop as quickly as possible
-    String retVal;
-    //if (getItemValue(var, &item, retVal)) {
-    if (getItemValue(var, &configItems[i], retVal)) {
-      return retVal;
-    }
+  //if (getItemValue(var, &item, retVal)) {
+  if (configItems.getItemValue(var, retVal)) {
+    return retVal;
   }
   return String();
 }
 
 void HandleConfigRequest(AsyncWebServerRequest *request) {
-  String inputMessage;
-  String inputParam;
   Serial.println(F("request_handler"));
-  int params = request->params();
 
   // look through the config objects looking for the provided key
     //for (configItemData item : configItems) {
-  for (int i = 0; i < std::size(configItems); i++) {
-      //TODO: Figure out what to do with an item that isn't handled.
-      //If that happens, the implication is either a communications issue or an attack on the interface.
-      handleFormResponse(&configItems[i], request);
-      Serial.println(F("HandleConfigRequest: reading back data:"));
-      Serial.print(configItems[i].key);
-      Serial.print(F(":"));
-      String Test = configItems[i].value;
-      Serial.println(Test);
-    }
+  configItems.saveResponseValues(request);
   request->redirect("/");
 }
 
 
 void HandleSaveRequest(AsyncWebServerRequest *request) {
   Serial.println("do save stuff here");
-  //configSaved = devConfig.saveConfigData();
-  //configSaved = saveConfigFile(CONFIG_FILE);
-  configSaved = valuesToJson();
-  //configSaved = true;
+  configItems.dumpToJson(jsonConfig);
+  saveConfigFile(CONFIG_FILE);
   request->send(LittleFS, "/index.htm", "text/html", false, processor);
 }
 
@@ -143,9 +103,7 @@ void HandleClearRequest (AsyncWebServerRequest *request) {
   //TODO check return status
   //devConfig.clearConfig();
   jsonConfig.clear();
-  for (int i = 0; i < std::size(configItems); i++) {
-    configItems[i].value.remove(0,configItems[i].value.length());
-  }
+  configItems.clearValues();
   request->send(LittleFS, "/index.htm", "text/html", false, processor);
 }
 
@@ -173,21 +131,15 @@ void registerHtmlInterfaces()
   server.on("/reboot", HTTP_POST, HandleRebootRequest);
   server.onNotFound(notFound);
 
+  //Init the config class
+  configItems.LoadValues(jsonConfig);
   //build up our strings for the templates
   //they won't change so only do this once.
-  //for (configItemData item : configItems) {
-  for (int i = 0; i < std::size(configItems); i++) {
-    //configFields = configFields + buildInputFormItem(&item);
-    configFields = configFields + buildInputFormItem(&configItems[i]);
-    //reportFields = reportFields + buildReportItem(&item);
-    reportFields = reportFields + buildReportItem(&configItems[i]);
-  }
+  configItems.buildInputFormEntries(configFields);
+  configItems.buildReportEntries(reportFields);
   Serial.println(F("reporting built strings:"));
   Serial.println(configFields);
   Serial.println();
   Serial.println(reportFields);
-  //configFields = tempStr1;
-  //reportFields = tempStr2;
-  //Move loaded data into the values in configItems
-  initValues();
+
 }

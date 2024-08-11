@@ -1,8 +1,6 @@
 **Current State**
-Consider this as a beta.
-It builds, and basic testing is working.
-Currently IRAM usage is very high. If your device code is small, this version of the code might be OK to use. 
-
+Consider this as a near final beta.
+This version is a refactor of code that passed some basic tests.
 
 Problem: There is a lack of examples of IOT devices that use the ESP-8266, use the Arduino framework, and are runtime configurable.
 
@@ -20,7 +18,7 @@ Why runtime configurable?
   - No need to recompile and flash to update wifi or other infrastructure changes
   
 Desired features:
-  - Fully runtime configurable
+  - Runtime configurable
     - The configuration should be able to be set wirelessly without the use of the Arduino IDE
     - Any device such as a PC, tablet, or phone should be able to configure the device
     - No app or additional software should be needed to configure the device
@@ -73,18 +71,19 @@ Prior lessons concerning WiFi state saving and restoring will be employed to min
 Additionally the sketch implementation will gather data from the sensors before turning the radio on to transmit it in an effort to further reduce power.
 Additional profiling will be needed to see if the use of LittleFS has a noticeable impact on power usage or if there is an alternative non-volatile data store that may be more power efficient.
 
-**Current state:**
-Essentally a beta
-Mode selection via reset button has been prototyped
-Basic web server functionality has been tested and template mode is understood
-LittleFS has been tested and is mostly understood
-JSON has been tested and is understood at a basic level
-HTML and configuration has been implemented as functional code for now.
-IRAM usage is very hign and there is not much room for device mode code.
-This version can be used for demonstration purposes.
+How to use:
+Open configItems.hpp
+Scroll to the end of the file. 
+Look for the vector configItems in the private data of the configurationItems class.
+Add and or remove configItemData entries as needed.
+Build, flash, and check if the served HTML configuration is correct.
 
-To Do:
-Reduce IRAM usage
-Evaluate what code can be made object oriented and if there is a clear advantage to converting it.
-Clean up debugging code
-Document/comment code.
+Possible big issues:
+Lack of https - there really isn't anything available for Arduino
+Password security - After research, there isn't really a great I can find to hande this. On device encrption means needing an on device key which just adds a step.
+                    Transmitting passwords in general is an issue. This is a subject that requires more research.
+Future work:
+More clean up
+Consider alternative methods to handle this
+  - Phone based app configuration
+    - Idea: construct config file on phone and send via something like sftp

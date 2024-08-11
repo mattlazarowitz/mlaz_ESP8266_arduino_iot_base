@@ -1,6 +1,28 @@
-// Project specific includes
-#include "configItems.h"
-#include "HtmlRequests.h"
+/*
+MIT License
+
+Copyright (c) 2024 Matthew Lazarowitz
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+**/
+#include "configItems.hpp"
+#include "HtmlRequests.hpp"
 #include <include/WiFiState.h>
 #include <ESP8266TimerInterrupt.h>
 #include <RTCMemory.h>
@@ -35,7 +57,9 @@ RTCMemory<devRtcData> rtcMemIface;
 
 devOpMode BootMode;
 
-//debug
+//
+// Simple debug function to convert the boot mode into a string
+//
 String bootModeToStr(devOpMode BootMode) {
   switch (BootMode) {
     case staDevice:
@@ -56,9 +80,14 @@ String bootModeToStr(devOpMode BootMode) {
 
 //
 // Timer ISR. 
-// See ReadMe for design discussion.
-// This timer interrupt acts as a one-shot to clear the reset count
-// if the boot progresses far enough to count as booted.
+// Used for boot mode change command.
+// Resets withon a predetermined time window are counted and used to determine a user commanded boot mode change. 
+// But if the count is reset at the end of Setup(), it's very hard for a human to use this functionality.
+// So this timer ISR creates a 750ms window instead. 
+// In battery powered device mode, this could become an issue if the device resets itself too quickly.
+// In that case, it may be better to add the reset functionality right before the reset or deep sleep command.
+// The process of reading a sensor, restoring the WiFi connection, and reporting the data should hopefully take 
+// long enough to allow for reliable reset detection.
 //
 void IRAM_ATTR TimerHandler()
 {
@@ -69,8 +98,11 @@ void IRAM_ATTR TimerHandler()
   timer1_disable();
 }
 
-//no wifi info, need to start in AP mode
-void setupNewConfigMode()
+//
+// Called from Setup() after the boot mode is determined.
+// 
+//
+void setupApConfigMode()
 {
   //setup softAP mode
   String configEspHostname = String("config_") + WiFi.hostname().c_str();
@@ -269,7 +301,7 @@ void setup() {
       setupDevMode();
       break;
     case apConfig:
-      setupNewConfigMode();
+      setupApConfigMode();
       break;
     case resetConfig:
       //devConfig.clearConfig();
