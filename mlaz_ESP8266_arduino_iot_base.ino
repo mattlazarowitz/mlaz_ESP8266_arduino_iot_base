@@ -23,22 +23,20 @@ SOFTWARE.
 **/
 #include "configItems.hpp"
 #include "HtmlRequests.hpp"
-#include <include/WiFiState.h>
 #include <ESP8266TimerInterrupt.h>
-#include <RTCMemory.h>
+#include "rtcInterface.hpp"
 
+//TODO: see if this can go into a header file when I do the header file cleanup.
+void setupDevMode();
+void loopDevMode();
+
+//TODO: Find a better place for this
 #define AP_IP_ADDR 192,168,30,1
 //Sketch specific data types
 
-//Data to be saved to the RTC RAM
-//This holds Wifi state data and a count of "interrupted boots" 
-//for temporary mode overrides
-typedef struct {
-  unsigned int unhandledResetCount;
-  WiFiState state;
-} devRtcData;
 
 //used to direct behavior based on the state of the device.
+//TODO: clean up commenting
 enum devOpMode {
   staDevice, //regular mode. Device is in station mode, it do the normal device functions
   staConfig, //"station mode" meaning on the configured wifi network, but boots to server the configuration pages to allow config updates
@@ -50,12 +48,8 @@ enum devOpMode {
 
 //globals
 AsyncWebServer server(80);
-
-// Init ESP8266 timer 1
 ESP8266Timer ITimer;
-
 RTCMemory<devRtcData> rtcMemIface;
-
 devOpMode BootMode;
 
 //
@@ -100,9 +94,11 @@ void IRAM_ATTR TimerHandler()
 }
 
 //
-// Called from Setup() after the boot mode is determined.
+// Setup() sub-function
+// This is the vertion of the Setup() function that needs to be called when the 
+// ESP8266 is operating in apConfig mode. 
+// The device comes up with WiFi in AP mode and runs a webserver to serve the config pages.
 // 
-//
 void setupApConfigMode()
 {
   Serial.println("setupApConfigMode");
@@ -122,8 +118,13 @@ void setupApConfigMode()
   server.begin();
 }
 
-//config mode requested by user but will try to be a device on provided wifi
-//Note: Need a better way to tie the JSON parameters to the defined config.
+//
+// Setup() sub-function
+// This is the vertion of the Setup() function that needs to be called when the 
+// ESP8266 is operating in staConfig mode. 
+// The device connects to the configured WiFi network but runs the webserver to 
+// serve the configuration pages rather than operate an IoT device.
+// 
 void setupReconfigMode()
 {
   Serial.println("setupReconfigMode");
@@ -142,57 +143,11 @@ void setupReconfigMode()
   Serial.println();
   Serial.println(F("WiFi connected\nIP address: "));
   Serial.println(WiFi.localIP());
-  //========================================================
 
   registerHtmlInterfaces();
   server.begin();
 }
 
-
-//regular mode
-//this cleans up setupDevMode() and isolates the wifi stuff so it can 
-//be done at the appropriate point in the sensor init, sensor read, data sent sequence.
-void DevModeWifi(devRtcData* data) {
-  String SsidStr = (char*)data->state.state.fwconfig.ssid;
-  if(SsidStr.equals(static_cast<String>(jsonConfig["ssid"]))){
-    if (!WiFi.resumeFromShutdown(data->state)) {
-      // Failed to restore state, do a regular connect.
-      WiFi.persistent(false); 
-      //invalidate the state data in case we fail a regular connect too.
-      data->state.state.fwconfig.ssid[0] = 0;
-      WiFi.hostname(static_cast<String>(jsonConfig["ssid"]));
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
-    } 
-  }
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println();
-  Serial.println(F("WiFi connected\nIP address: "));
-  Serial.println(WiFi.localIP());
-}
-
-//may not need this. Here mostly for reference.
-void devModeEnd(devRtcData* data) {
-    if (data != nullptr) {
-      WiFi.shutdown(data->state);
-      rtcMemIface.save();
-      delay (10);
-    } else {
-      WiFi.disconnect( true );
-      delay(1);
-    }
-}
-
-
-void setupDevMode()
-{
-  DevModeWifi(rtcMemIface.getData());
-}
 
 //
 // There are some common steps needed by all boot modes. Those get performed here.
@@ -246,6 +201,12 @@ bool commonInit(){
     rtcMemIface.save();
     //now see if we hit any of the manual mode override thresholds
     switch (myRtcData->unhandledResetCount) {
+      case 0:
+      case 1:
+        Serial.println(F("no override"));
+        Serial.print(F("Boot mode: "));
+        Serial.println(bootModeToStr(BootMode));
+        break;
       case 2:
         Serial.println(F("reconfig on configed network"));
         if (BootMode == staDevice) {
@@ -254,25 +215,19 @@ bool commonInit(){
           //just go into normal config mode.
           BootMode = apConfig;
         }
-        blinkLed(2);
         break;
       case 3:
         Serial.println("return to AP mode, keep config");
         BootMode = apConfig;
-        blinkLed(3);
+
         break;
-      case 4:
+      // Use 4 or more concurrent resets as the signal to wipe
+      // the stored configuration.
+      // This handles any case where a reset happens while the config is being erased.
+      default:
         Serial.println(F("\"factory reset\""));
         BootMode = resetConfig;
-        break;
-      default:
-        // Maybe make this call the code to get config data and set mode here.
-        // for now just set normal mode and let code below sort things out.
-        Serial.println(F("no override"));
-        Serial.print(F("Boot mode: "));
-        Serial.println(bootModeToStr(BootMode));
-        //BootMode = staDevice;
-        blinkLed(4);
+        blinkLed(5);
         break;
     }
   }
@@ -281,17 +236,12 @@ bool commonInit(){
 void blinkLed(int blinks) {
   for (int i = 0; i < blinks;i++) {
     digitalWrite(LED_BUILTIN, HIGH);
-    delay(500);
+    delay(250);
     digitalWrite(LED_BUILTIN, LOW);
-    delay(500);
+    delay(250);
   }
 }
 void setup() {
-  // I may want to make the mode specefic setups handled via a class factory.
-  // Why? Just to practice it.
-  //note that getting LittleFS running is mandadory for all modes and 
-  //trying to load the config is common for all modes.
-  //Note: Not sure how LittleFS impacts battery use.
   Serial.begin(115200);
   delay(20);
   Serial.println(F("Start setup"));
@@ -320,6 +270,8 @@ void setup() {
       break;
 
   }
+
+  Serial.println("Setup done");
 }
 
 void loop() {

@@ -127,12 +127,12 @@ public:
       // So while String concatination is syntactically messier, it seems to be the cleaner design.
       if (!configItems[i].protect_pw) {
         buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td><input type=\"text\" name=\"" + configItems[i].key + 
-          "\" maxlength=\"" + String(configItems[i].maxLength) + "\" placeholder=\"%" + configItems[i].key + "%\"><br>";
+          "\" maxlength=\"" + String(configItems[i].maxLength) + "\" placeholder=\"%" + configItems[i].key + "%\"><br>\n";
+      } else {
+        //<tr><td>{prettyName} <td><input type="password" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
+        buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td><input type=\"password\" name=\"" + configItems[i].key + 
+          "\" maxlength=\"" + String(configItems[i].maxLength) + "\" placeholder=\"%" + configItems[i].key + "%\"><br>\n";
       }
-
-      //<tr><td>{prettyName} <td><input type="password" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
-      buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td><input type=\"password\" name=\"" + configItems[i].key + 
-        "\" maxlength=\"" + String(configItems[i].maxLength) + "\" placeholder=\"%" + configItems[i].key + "%\"><br>";
     }
     return true;
   }
@@ -154,7 +154,7 @@ public:
       //sprint needs a pre-defined buffer. The issue is with string inputs, it's hard to figure out a good
       //compromse.
       //So while String concatination is syntactically messier, it seems to be the cleaner design.
-      buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td>%" + configItems[i].key + "%<br>";
+      buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td>%" + configItems[i].key + "%<br>\n";
     }
     return true;
   }
@@ -183,6 +183,7 @@ public:
         }
       }
     }
+    configEmpty = false;
   }
 
   //
@@ -235,6 +236,7 @@ public:
     for (int i = 0; i < configItems.size(); i++) {
       configItems[i].value.remove(0,configItems[i].value.length());
     }
+    configEmpty = true;
   }
 
 //
@@ -253,10 +255,17 @@ public:
     return true;
   }
 
+  bool isEmpty() {
+    return configEmpty;
+  }
+
+
 //
 // Configuration data. Placed at the very end of this file in an effort 
 // to make it easier to find and update for the project's needs.
 private:
+  bool configEmpty = true; //prevents saving of an empty config
+  
   std::vector<configItemData> configItems = 
   {
     {

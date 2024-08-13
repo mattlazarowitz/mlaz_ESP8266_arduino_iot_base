@@ -96,9 +96,7 @@ void HandleSaveRequest(AsyncWebServerRequest *request) {
 void HandleRebootRequest (AsyncWebServerRequest *request) {
   Serial.println(F("rebooting..."));
   request->send(200, "text/plain", "Rebooting...");
-  delay (1000);
   ESP.restart();
-  delay (1000);
 }
 
 void HandleClearRequest (AsyncWebServerRequest *request) {
