@@ -27,6 +27,7 @@ SOFTWARE.
 #include <ESP8266TimerInterrupt.h>
 #include <RTCMemory.h>
 
+#define AP_IP_ADDR 192,168,30,1
 //Sketch specific data types
 
 //Data to be saved to the RTC RAM
@@ -104,9 +105,14 @@ void IRAM_ATTR TimerHandler()
 //
 void setupApConfigMode()
 {
-  //setup softAP mode
-  String configEspHostname = String("config_") + WiFi.hostname().c_str();
-  WiFi.softAPConfig(IPAddress(192,168,30,1), IPAddress(0,0,0,0), IPAddress(255,255,255,0));
+  Serial.println("setupApConfigMode");
+  String configEspHostname;
+  if (jsonConfig.containsKey("hostname")) {
+    configEspHostname = String("config:") + String(jsonConfig["hostname"]);
+  } else {
+    configEspHostname = String("config:") + WiFi.hostname().c_str();
+  }
+  WiFi.softAPConfig(IPAddress(AP_IP_ADDR), IPAddress(0,0,0,0), IPAddress(255,255,255,0));
   Serial.print(F("AP hostname: "));
   Serial.println(configEspHostname);
   WiFi.softAP(configEspHostname);
@@ -117,16 +123,16 @@ void setupApConfigMode()
 }
 
 //config mode requested by user but will try to be a device on provided wifi
+//Note: Need a better way to tie the JSON parameters to the defined config.
 void setupReconfigMode()
 {
-  //=================================
-  //move all this to a wifi station mode func after testing?
-  WiFi.hostname(static_cast<String>(jsonConfig["name"]).c_str());
+  Serial.println("setupReconfigMode");
+  WiFi.hostname(static_cast<String>(jsonConfig["hostname"]).c_str());
   Serial.print(F("Connecting to "));
   Serial.println(static_cast<String>(jsonConfig["ssid"]));
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
+  WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["WiFiPw"]));
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);

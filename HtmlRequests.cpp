@@ -84,7 +84,12 @@ void HandleConfigRequest(AsyncWebServerRequest *request) {
 void HandleSaveRequest(AsyncWebServerRequest *request) {
   Serial.println("do save stuff here");
   configItems.dumpToJson(jsonConfig);
-  saveConfigFile(CONFIG_FILE);
+  if (configItems.isEmpty() || jsonConfig.isNull()) {
+    eraseConfig(CONFIG_FILE);
+  } else {
+    configItems.dumpToJson(jsonConfig);
+    saveConfigFile(CONFIG_FILE);
+  }
   request->send(LittleFS, "/index.htm", "text/html", false, processor);
 }
 
@@ -104,6 +109,7 @@ void HandleClearRequest (AsyncWebServerRequest *request) {
   //devConfig.clearConfig();
   jsonConfig.clear();
   configItems.clearValues();
+  //eraseConfig(CONFIG_FILE);
   request->send(LittleFS, "/index.htm", "text/html", false, processor);
 }
 
@@ -137,9 +143,10 @@ void registerHtmlInterfaces()
   //they won't change so only do this once.
   configItems.buildInputFormEntries(configFields);
   configItems.buildReportEntries(reportFields);
-  Serial.println(F("reporting built strings:"));
+  Serial.println(F("Input fields:"));
   Serial.println(configFields);
   Serial.println();
+  Serial.println(F("Report fields:"));
   Serial.println(reportFields);
 
 }
