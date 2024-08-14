@@ -24,17 +24,6 @@ SOFTWARE.
 #ifndef CONFIG_ITEMS_H_
 #define CONFIG_ITEMS_H_
 
-#include <Arduino.h>
-#ifdef ESP32
-#include <WiFi.h>
-#include <AsyncTCP.h>
-#else
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
-#endif
-#include <ArduinoJson.h>
-#include <ESPAsyncWebServer.h>
-#include <LittleFS.h>
 
 #define CONFIG_FILE "/config.json"
 

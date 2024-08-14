@@ -22,15 +22,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 **/
 
-#include "htmlRequests.hpp"
-//#include "DevConfigData.h"
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <ESPAsyncWebServer.h>
+#include <LittleFS.h>
+
+
 #include "configItems.hpp"
+#include "htmlRequests.hpp"
 
-//best way to do this?
-//extern DevConfigData devConfig;
 extern AsyncWebServer server;
-extern JsonDocument jsonConfig;
-
 
 bool configSaved = false;
 

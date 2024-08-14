@@ -23,9 +23,7 @@ SOFTWARE.
 **/
 
 #ifndef RTC_INTERFACE_H_
-#define RTC_INTERFACE_H_
-#include <include/WiFiState.h>
-#include <RTCMemory.h>
+#define RTC_INTERFACE_H_-
 
 //Data to be saved to the RTC RAM
 //This holds Wifi state data and a count of "interrupted boots" 
