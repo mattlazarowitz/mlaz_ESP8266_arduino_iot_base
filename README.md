@@ -84,6 +84,7 @@ Password security - After research, there isn't really a great I can find to han
                     Transmitting passwords in general is an issue. This is a subject that requires more research.
 Future work:
 More clean up
+Look into making the config items class more generalized with the goal of being able to create more HTML entries than just text input fields.
 Consider alternative methods to handle this
   - Phone based app configuration
     - Idea: construct config file on phone and send via something like sftp

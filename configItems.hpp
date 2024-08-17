@@ -166,7 +166,10 @@ public:
         //If that happens, the implication is either a communications issue or an attack on the interface.
       if (request->hasParam(configItems[i].key, true)) {
         Serial.println(configItems[i].key);
-          if (request->getParam(configItems[i].key, true)->value().length() < configItems[i].maxLength){
+        if (request->getParam(configItems[i].key, true)->value().length() < configItems[i].maxLength &&
+            request->getParam(configItems[i].key, true)->value().length() > 0 ){ 
+          //only update if a value is below the max length and 
+          //if data was actually sent. Clearing data is the function of the clear button.
           configItems[i].value = request->getParam(configItems[i].key, true)->value();
           continue;
         }

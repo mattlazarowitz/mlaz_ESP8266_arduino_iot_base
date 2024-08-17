@@ -58,6 +58,7 @@ AsyncWebServer server(80);
 ESP8266Timer ITimer;
 RTCMemory<devRtcData> rtcMemIface;
 devOpMode BootMode;
+bool rtcInit;
 
 //
 // Simple debug function to convert the boot mode into a string
@@ -162,7 +163,6 @@ void setupReconfigMode()
 bool commonInit(){
   //devRtcData* myRtcData = rtcMemIface.getData();
   devRtcData* myRtcData = nullptr;
-  bool rtcInit;
   ITimer.attachInterruptInterval(750000, TimerHandler);
   Serial.println(F("Mount LittleFS"));
   if (!LittleFS.begin()) {
@@ -283,4 +283,7 @@ void setup() {
 
 void loop() {
 // check BootMode and do the right loop required based on that.
+  if (BootMode == staDevice) {
+    loopDevMode();
+  }
 }
