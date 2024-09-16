@@ -49,6 +49,8 @@ void DevModeWifi(devRtcData* data) {
       WiFi.mode(WIFI_STA);
       WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
     }
+  } else {
+    WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["WiFiPw"]));
   }
 
   while (WiFi.status() != WL_CONNECTED) {
