@@ -31,6 +31,19 @@ SOFTWARE.
 #include "configItems.hpp"
 #include "rtcInterface.hpp"
 
+WiFiEventHandler wifiDisconnectHandler;
+
+void wifiReconnect() {
+  WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
+}
+
+//
+void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
+  Serial.println("Disconnected from Wi-Fi.");
+  // Just try and recconect to wifi.
+  // a better way may be to do this with a oneshot timer and callback. 
+  wifiReconnect();
+}
 
 //
 // Device mode worker function. 
@@ -39,6 +52,7 @@ SOFTWARE.
 //
 void DevModeWifi(devRtcData* data) {
   String SsidStr = (char*)data->state.state.fwconfig.ssid;
+  wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
   if(SsidStr.equals(static_cast<String>(jsonConfig["ssid"]))){
     if (!WiFi.resumeFromShutdown(data->state)) {
       // Failed to restore state, do a regular connect.
@@ -77,9 +91,9 @@ void devModeEnd(devRtcData* data) {
 
 //
 // Setup() sub-function
-// This is the vertion of the Setup() function that needs to be called when the 
+// This is the version of the Setup() function that needs to be called when the 
 // ESP8266 is operating in staDevice mode. 
-// This is 
+//Generally, code from a basic test sketch can go here.
 // 
 void setupDevMode()
 {
