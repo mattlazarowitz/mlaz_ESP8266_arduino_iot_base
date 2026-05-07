@@ -1,7 +1,3 @@
-**Current State**
-Consider this as a near final beta.
-This version is a refactor of code that passed some basic tests.
-
 Problem: There is a lack of examples of IOT devices that use the ESP-8266, use the Arduino framework, and are runtime configurable.
 
 Why ESP-8266?
