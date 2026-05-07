@@ -28,6 +28,26 @@ SOFTWARE.
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 
+//
+// Outcome of the most recent /save request, surfaced to the config page
+// via the %CONFIG_SAVED% template variable. Intentionally parallels the
+// loadConfigResult / lastConfigLoadResult pattern so save and load both
+// communicate with the user in the same shape.
+//
+//   idle   - no save attempt has happened (or the status was reset by a
+//            subsequent action). Page renders without a status banner.
+//   saved  - last save attempt succeeded.
+//   failed - last save attempt failed; the settings shown above were
+//            not written to flash.
+//
+enum class saveStatus {
+  idle,
+  saved,
+  failed
+};
+
+extern saveStatus lastSaveStatus;
+
 String processor(const String& var);
 void HandleConfigRequest(AsyncWebServerRequest *request);
 void HandleSaveRequest(AsyncWebServerRequest *request);

@@ -37,14 +37,32 @@ struct configItemData {
   String value;
 };
 
-bool loadConfigFile(String configFileLoc);
+//
+// Result of the most recent loadConfigFile() call.
+//   loaded  - file present, parsed cleanly into jsonConfig
+//   missing - file simply does not exist (brand new device, post-reset)
+//   corrupt - file exists but could not be opened or parsed; the caller
+//             is responsible for erasing it before falling back. The
+//             corrupt status is intentionally preserved in the global
+//             lastConfigLoadResult after the file is erased so the
+//             config page can surface a one-time recovery banner.
+//
+enum class loadConfigResult {
+  loaded,
+  missing,
+  corrupt
+};
+
+extern loadConfigResult lastConfigLoadResult;
+
+loadConfigResult loadConfigFile(String configFileLoc);
 bool saveConfigFile(String configFileLoc);
 bool eraseConfig(String configFileLoc);
 
 
 //class configurationItems: encapsulation of the config items.
-// To modify or add etries to be stored in teh config file, 
-// see the vector in the provate data at the end of the class.
+// To modify or add entries to be stored in the config file,
+// see the vector in the private data at the end of the class.
 //
 // TODO: consider adding wrapper methods for the [] operator and size() method.
 //   Right now these aren't really needed but it might be a nice to have in the future.
@@ -54,14 +72,14 @@ class configurationItems {
 public:
 //
 // LoadValues
-// Take values from JSON configuration data and load it to the value field
-// of the config item with a matching key.
-// Currenty, no error is generated if a key is defined in the config data 
-// but is not in the JSON data.
+// Take values from JSON configuration data and load them to the value
+// field of the config item with a matching key.
+// Currently, no error is generated if a key is defined in the config
+// data but is not in the JSON data.
 //
-// Note for the future is that this should indicate an issue with the config 
-// and recovery action should be to erase the file then bring the device back 
-// up as unconfigured.
+// Note for the future: this should indicate an issue with the config
+// and the recovery action should be to erase the file then bring the
+// device back up as unconfigured.
 // 
   void LoadValues(JsonDocument &jsonConfig) {
     Serial.println(F("Load config values"));
@@ -97,28 +115,30 @@ public:
   // 1) Check if the field is for a protected item like a password.
   // 2) If not, build a row where the input type is text.
   // 3) If it is, build a row where the input type is a password.
-  // 4) Concatinate the generated string to the buffer provided by the caller.
+  // 4) Concatenate the generated string to the buffer provided by the caller.
   //
-  // TODO: consider changing to void return. It doesn't look like the Arduino string class
-  // throws exceptions. One might happen from memory allocation which needs to be investigated.
-  // 
-  // Note: Sprint might be syntactically cleaner but the need to make a best 
-  // guess at a max buffer size makes counters that with design issues.
-  // Support std::format in Arduino isn't great so the best compromise 
-  // seems to be string concatination via the addition operator.
+  // TODO: consider changing to void return. It doesn't look like the
+  // Arduino String class throws exceptions, but allocation failure might;
+  // that path needs to be investigated.
   //
+  // Note: snprintf would be syntactically cleaner, but the need to pick
+  // a max buffer size up front offsets that benefit with its own design
+  // issues. std::format support in the Arduino toolchain isn't great
+  // either, so string concatenation via the addition operator is the
+  // current compromise.
   //
   bool buildInputFormEntries(String &buffer) {
     for (int i = 0; i < configItems.size(); i++) {
-      //<tr><td>{prettyName} <td><input type="text" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
-      // This could probably be done more 'cleanly' in terms of syntax with sprint_f but the manual buffer managment
-      // takes away from that.
-      // So while String concatination is syntactically messier, it seems to be the cleaner design.
+      //<tr><td>{displayName} <td><input type="text" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
+      // This could probably be done more 'cleanly' in terms of syntax
+      // with snprintf, but the manual buffer management it requires takes
+      // away from that. So while String concatenation is syntactically
+      // messier, it seems to be the cleaner design.
       if (!configItems[i].protect_pw) {
         buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td><input type=\"text\" name=\"" + configItems[i].key + 
           "\" maxlength=\"" + String(configItems[i].maxLength) + "\" placeholder=\"%" + configItems[i].key + "%\"><br>\n";
       } else {
-        //<tr><td>{prettyName} <td><input type="password" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
+        //<tr><td>{displayName} <td><input type="password" name="{key}" maxlength="{maxLength}" placeholder="%{key}%"><br>
         buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td><input type=\"password\" name=\"" + configItems[i].key + 
           "\" maxlength=\"" + String(configItems[i].maxLength) + "\" placeholder=\"%" + configItems[i].key + "%\"><br>\n";
       }
@@ -139,10 +159,10 @@ public:
   //
   bool buildReportEntries(String &buffer) {
     for (int i = 0; i < configItems.size(); i++) {
-      //<tr><td>{prettyName} <td>%{key}%<br>
-      //sprint needs a pre-defined buffer. The issue is with string inputs, it's hard to figure out a good
-      //compromse.
-      //So while String concatination is syntactically messier, it seems to be the cleaner design.
+      //<tr><td>{displayName} <td>%{key}%<br>
+      // snprintf needs a pre-defined buffer. With variable-length string
+      // inputs that's hard to size cleanly. So while String concatenation
+      // is syntactically messier, it ends up being the cleaner design.
       buffer = buffer + "<tr><td>" + configItems[i].displayName + " <td>%" + configItems[i].key + "%<br>\n";
     }
     return true;
@@ -150,12 +170,12 @@ public:
 
 //
 // saveResponseValues
-// Take the response data from the HTML server, extract the values from the response, 
-// and store it according the appropriate key.
+// Take the response data from the HTML server, extract the values from
+// the response, and store each one against the appropriate key.
 //
-// Parameter: request A pointer to the request data provided by the HTML server.
-//    Since the form data  *should* have been build by this class, the response 
-//    data should also match the config data.
+// Parameter: request - A pointer to the request data provided by the HTML
+//    server. Since the form data *should* have been built by this class,
+//    the response data should also match the config data.
 //
 // TODO: Error checking on the response data. A mismatch should be considered to 
 //    indicate a possible attack and the data ignored.
@@ -183,17 +203,21 @@ public:
   // Provide a value string for both the report section and the placeholder in the input section.
   // Protected items must have a dummy string provided rather than the actual value.
   //
-  // 1) Check the template variable provided by the webserver against the provided configuration item.
+  // 1) Check the template variable provided by the webserver against
+  //    the provided configuration item.
   // 2) If the item is a match, check if the item is protected.
   // 3) If it is not protected, set a reference to the stored value string.
   // 4) If it is protected, check if there is a stored value.
-  // 5) If it is not emply, set a reference to a dummy string.
-  // 6) Return true if the reference was updated, false if the refernece isn't 'valid'.
+  // 5) If it is not empty, set a reference to a dummy string.
+  // 6) Return true if the reference was updated, false if the reference
+  //    isn't 'valid'.
   //
-  // Parameter: keyVar - the string for the template variabe from the HTML data to be replaced.
-  // Parameter: valueString - The refernce to provide the text to use in place of the template variable.
+  // Parameter: keyVar - the string for the template variable from the
+  //    HTML data to be replaced.
+  // Parameter: valueString - The reference to provide the text to use
+  //    in place of the template variable.
   //
-  // Returns True if valueString has been updated with approriate data.
+  // Returns True if valueString has been updated with appropriate data.
   //         False if the variable was not claimed.
   //
   bool getItemValue(String keyVar, String &valueString) {

@@ -25,16 +25,41 @@ SOFTWARE.
 #ifndef RTC_INTERFACE_H_
 #define RTC_INTERFACE_H_
 
-//Data to be saved to the RTC RAM
-//This holds Wifi state data and a count of "interrupted boots" 
-//for boot mode mode overrides
+//
+// Data persisted in RTC RAM. Survives deep sleep and software resets;
+// lost on power loss (the desired "fresh start" semantic on a power
+// cycle).
+//
+//   unhandledResetCount  Used by the multi-press mode-change detection.
+//                        See the reset-counter contract block in
+//                        commonInit() for the full design.
+//
+//   state                Saved Wi-Fi state for fast resume across deep
+//                        sleep cycles via WiFi.resumeFromShutdown().
+//
+//   backoffLevel         Index into the progressive-backoff schedule in
+//                        backoff.cpp. 0 = healthy. Bumped (capped at
+//                        the schedule length) on each end-to-end
+//                        failure, reset to 0 on each end-to-end
+//                        success. See backoff.hpp for the API.
+//
 typedef struct {
   unsigned int unhandledResetCount;
   WiFiState state;
+  uint8_t backoffLevel;
 } devRtcData;
 
 //please ensure these are in your .ino file.
 extern RTCMemory<devRtcData> rtcMemIface;
 extern bool rtcInit;
+
+//
+// Zero the user-press reset counter in RTC RAM. Call this immediately
+// before any software-initiated reset (ESP.restart) or deep sleep so the
+// resulting wakeup is treated as a clean boot rather than the next press
+// in a multi-press sequence. See commonInit() in the .ino for the full
+// contract.
+//
+void clearResetCount();
 
 #endif

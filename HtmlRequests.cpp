@@ -29,43 +29,67 @@ SOFTWARE.
 
 
 #include "configItems.hpp"
-#include "htmlRequests.hpp"
+#include "HtmlRequests.hpp"
 
 extern AsyncWebServer server;
 
-bool configSaved = false;
+//
+// Outcome of the most recent /save request. See saveStatus enum docs in
+// HtmlRequests.hpp. Defaults to idle so a fresh boot's config page does
+// not display a stale banner.
+//
+saveStatus lastSaveStatus = saveStatus::idle;
 
 
 String reportFields;
 //The complete list of config fields to be used for the %CONFIG_FIELDS% template
 String configFields;
 
-configurationItems configItems; //melm rename this once all functional code is encapsulated into this class.
+// TODO: rename this symbol once all functional config code is fully
+// encapsulated in the configurationItems class so the global and the
+// type don't share a near-identical name.
+configurationItems configItems;
 
 //
 //    Webserver HTML template processor/callback
 //
-  
+
 String processor(const String& var) {
   String retVal;
   Serial.print(F("str processor: "));
   Serial.println(var);
 
-
   if (var == "CONFIG_SAVED") {
-    if (configSaved) {
-      return "configuration saved";
+    switch (lastSaveStatus) {
+      case saveStatus::saved:
+        return F("<p style=\"color:green\">Configuration saved.</p>");
+      case saveStatus::failed:
+        return F("<p style=\"color:red\">"
+                 "Failed to save the configuration. The settings shown "
+                 "above were not written to flash."
+                 "</p>");
+      case saveStatus::idle:
+      default:
+        return String();
     }
   }
-
-//switch to this once configs are done
   if (var == "CONFIG_FIELDS") {
     return configFields;
   }
   if (var == "REPORT_FIELDS"){
     return reportFields;
   }
-  //if (getItemValue(var, &item, retVal)) {
+  if (var == "CONFIG_STATUS") {
+    // Only the corrupt case surfaces UI. loaded and missing both render
+    // empty so the page layout is unchanged on a normal device.
+    if (lastConfigLoadResult == loadConfigResult::corrupt) {
+      return F("<p style=\"color:red\">"
+               "The previous configuration file was corrupted and has been "
+               "erased. Please re-enter your settings."
+               "</p>");
+    }
+    return String();
+  }
   if (configItems.getItemValue(var, retVal)) {
     return retVal;
   }
@@ -74,9 +98,9 @@ String processor(const String& var) {
 
 void HandleConfigRequest(AsyncWebServerRequest *request) {
   Serial.println(F("request_handler"));
-
-  // look through the config objects looking for the provided key
-    //for (configItemData item : configItems) {
+  // The configurationItems class walks the request itself; this handler
+  // just forwards the form data through and returns the user to the
+  // top-level page.
   configItems.saveResponseValues(request);
   request->redirect("/");
 }
@@ -87,9 +111,27 @@ void HandleSaveRequest(AsyncWebServerRequest *request) {
   configItems.dumpToJson(jsonConfig);
   if (configItems.isEmpty() || jsonConfig.isNull()) {
     eraseConfig(CONFIG_FILE);
+    // No config persisted is functionally the same as not having one; this
+    // also clears any leftover "corrupt" banner from a prior load attempt.
+    lastConfigLoadResult = loadConfigResult::missing;
+    // Erasing in response to a save with no fields populated is the
+    // user's expressed intent; treat the operation as a successful save.
+    lastSaveStatus = saveStatus::saved;
   } else {
     configItems.dumpToJson(jsonConfig);
-    saveConfigFile(CONFIG_FILE);
+    if (saveConfigFile(CONFIG_FILE)) {
+      // Successful write supersedes whatever the prior load saw, including
+      // any earlier corrupt-file recovery state. Subsequent renders of the
+      // config page should not show the recovery banner.
+      lastConfigLoadResult = loadConfigResult::loaded;
+      lastSaveStatus = saveStatus::saved;
+    } else {
+      // Write failed. Leave lastConfigLoadResult alone so any previous
+      // corrupt-state banner is preserved (the user is going to need to
+      // try again either way), and surface the failure on the page so
+      // the user does not assume their settings were persisted.
+      lastSaveStatus = saveStatus::failed;
+    }
   }
   request->send(LittleFS, "/index.htm", "text/html", false, processor);
 }
@@ -101,14 +143,18 @@ void HandleRebootRequest (AsyncWebServerRequest *request) {
 }
 
 void HandleClearRequest (AsyncWebServerRequest *request) {
-  //no data, we just go ahead and delete the config file
-  //TODO: Move to config object
+  // Clear in-memory config; the persisted file is left alone here and
+  // is rewritten (or erased) the next time the user submits a save.
+  // TODO: factor this into configurationItems so the global jsonConfig
+  // does not need to be touched directly from the HTTP layer.
   Serial.print(F("Deleting config"));
-  //TODO check return status
-  //devConfig.clearConfig();
   jsonConfig.clear();
   configItems.clearValues();
-  //eraseConfig(CONFIG_FILE);
+  // User-initiated clear: explicitly drop any prior corrupt-state banner
+  // and any stale save-status banner, since we are starting a fresh
+  // configuration cycle.
+  lastConfigLoadResult = loadConfigResult::missing;
+  lastSaveStatus = saveStatus::idle;
   request->send(LittleFS, "/index.htm", "text/html", false, processor);
 }
 
@@ -120,14 +166,21 @@ void notFound(AsyncWebServerRequest *request) {
 }
 
 
-//rename this as HTML startup. Instantiate the config objects here and build the HTML that needs to be output
+//
+// Register the HTTP routes the config web UI exposes, populate the
+// configurationItems instance from the loaded JSON config, and build the
+// static template fragments (configFields, reportFields) that the
+// processor() callback substitutes into index.htm. Called once per boot
+// from whichever mode wants the config server up (apConfig or staConfig).
+//
+// TODO: rename to something like registerConfigUi to better reflect the
+// scope; the current name reads as "register all HTML" which is broader
+// than what this function actually does.
+//
 void registerHtmlInterfaces()
 {
-  //String tempStr1 = new String;
-  //String tempStr2 = new String;
   Serial.println(F("registerHtmlInterfaces"));
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
-    //request->send_P(200, "text/html", index_html, processor);
     request->send(LittleFS, "/index.htm", "text/html", false, processor);
   });
   server.on("/config", HTTP_POST, HandleConfigRequest);

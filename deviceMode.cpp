@@ -30,44 +30,54 @@ SOFTWARE.
 
 #include "configItems.hpp"
 #include "rtcInterface.hpp"
-
-WiFiEventHandler wifiDisconnectHandler;
-
-void wifiReconnect() {
-  WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
-}
-
-//
-void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
-  Serial.println("Disconnected from Wi-Fi.");
-  // Just try and recconect to wifi.
-  // a better way may be to do this with a oneshot timer and callback. 
-  wifiReconnect();
-}
+#include "backoff.hpp"
 
 //
 // Device mode worker function. 
 // This is used to try and restore a saved WiFi connection.
 // Performing this operation leads to faster wifi connections and reduced WiFi power draw.
 //
+// Reconnect handling: we deliberately do not register a manual
+// onStationModeDisconnected handler here. The ESP8266 SDK's own
+// auto-reconnect (enabled explicitly below) already retries on drop, and
+// stacking a second hand-rolled retry on top of it leads to the radio
+// being hammered with redundant WiFi.begin() calls during a sustained
+// outage. If we later need disconnect-event-driven backoff, the right
+// place for it is the same state machine that owns the boot-time
+// progressive-sleep retry, so both paths share one policy.
+//
 void DevModeWifi(devRtcData* data) {
   String SsidStr = (char*)data->state.state.fwconfig.ssid;
-  wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
+  WiFi.setAutoReconnect(true);
   if(SsidStr.equals(static_cast<String>(jsonConfig["ssid"]))){
     if (!WiFi.resumeFromShutdown(data->state)) {
       // Failed to restore state, do a regular connect.
       WiFi.persistent(false); 
       //invalidate the state data in case we fail a regular connect too.
       data->state.state.fwconfig.ssid[0] = 0;
-      WiFi.hostname(static_cast<String>(jsonConfig["ssid"]));
+      WiFi.hostname(static_cast<String>(jsonConfig["hostname"]));
       WiFi.mode(WIFI_STA);
-      WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["pw"]));
+      WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["WiFiPw"]));
     }
   } else {
     WiFi.begin(static_cast<String>(jsonConfig["ssid"]), static_cast<String>(jsonConfig["WiFiPw"]));
   }
 
+  // Bounded connect attempt. An infinite spin here means an outage at
+  // boot hangs the device forever, blocking the backoff / sleep path.
+  const unsigned long connectTimeoutMs = 30000;
+  const unsigned long connectStartMs = millis();
   while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - connectStartMs >= connectTimeoutMs) {
+      Serial.println();
+      Serial.println(F("WiFi connect timed out; entering backoff sleep."));
+      // Hand off to the progressive-backoff state machine. This bumps
+      // the RTC-stored backoff level (capped) and deep-sleeps for the
+      // corresponding duration. The reset counter is cleared inside,
+      // so the resulting wake is not interpreted as a user-press for
+      // the multi-press mode-change signal. Does not return.
+      backoffMarkFailureAndSleep();
+    }
     delay(500);
     Serial.print(".");
   }
@@ -77,23 +87,13 @@ void DevModeWifi(devRtcData* data) {
   Serial.println(WiFi.localIP());
 }
 
-//may not need this. Here mostly for reference.
-void devModeEnd(devRtcData* data) {
-    if (data != nullptr) {
-      WiFi.shutdown(data->state);
-      rtcMemIface.save();
-      delay (10);
-    } else {
-      WiFi.disconnect( true );
-      delay(1);
-    }
-}
-
 //
 // Setup() sub-function
 // This is the version of the Setup() function that needs to be called when the 
 // ESP8266 is operating in staDevice mode. 
-//Generally, code from a basic test sketch can go here.
+// The end-of-cycle Wi-Fi state save + deep sleep that earlier scaffolding
+// gestured at is now provided by cleanDeepSleep() / backoffMarkFailureAndSleep()
+// in backoff.cpp; project code in loopDevMode() calls those.
 // 
 void setupDevMode()
 {
