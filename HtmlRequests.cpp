@@ -173,10 +173,6 @@ void notFound(AsyncWebServerRequest *request) {
 // processor() callback substitutes into index.htm. Called once per boot
 // from whichever mode wants the config server up (apConfig or staConfig).
 //
-// TODO: rename to something like registerConfigUi to better reflect the
-// scope; the current name reads as "register all HTML" which is broader
-// than what this function actually does.
-//
 void registerHtmlInterfaces()
 {
   Serial.println(F("registerHtmlInterfaces"));

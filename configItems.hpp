@@ -105,7 +105,7 @@ public:
   }
 
   //
-  // buildInputFormItem
+  // buildInputFormEntries
   // HTML input is handled via a form with multiple fields.
   // This adds a field for the form section of the HTML as a table row.
   //

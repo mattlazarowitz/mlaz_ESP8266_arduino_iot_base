@@ -91,18 +91,59 @@ void DevModeWifi(devRtcData* data) {
 // Setup() sub-function
 // This is the version of the Setup() function that needs to be called when the 
 // ESP8266 is operating in staDevice mode. 
-// The end-of-cycle Wi-Fi state save + deep sleep that earlier scaffolding
-// gestured at is now provided by cleanDeepSleep() / backoffMarkFailureAndSleep()
-// in backoff.cpp; project code in loopDevMode() calls those.
+// The actual contents of the setup function will depend on if the device needs
+// to operate in a low power mode or not.
+// If it's a low power device, you will put all the code to get data from sensors
+// before the wifi call.
+// After wifi is connected, the device should connect to the MQTT server and
+// update all the required topics.
+//
+// The MQTT libraries here are asynchronous so the system needs to wait for
+// the topics to be updated before it can sleep which is why that is done in
+// the loop function.
+//
+// For devices that are not battery powered and do not need a low power mode,
+// the setup code here can be a normal Arduino Setup() like function.
 // 
 void setupDevMode()
 {
+  // For a low power mode device, you will put your code to init your interface,
+  // read you your sensors, and prep to send the data.
+  // Then turn on the radio so it can connect to your network
   DevModeWifi(rtcMemIface.getData());
+  // For low power mode, connect to your MQTT server and update your topics here.
 }
 
-
-
+//
+// For low power mode, this needs to wait for the topics to be updated then sleep
+// For devices that do not need to be low power, this is a normal Arduino loop.
 void loopDevMode()
 {
+// commented code is example code for low power mode on a device that uses 
+//the async MQTT lib.
+// This should be common for any low power device that uses this framework.
+/*
+  if (topicsPublished >= topicsToPublish) {
+    Serial.println("topics published, sleeping");
+    mqttClient.disconnect(false);
+    backoffMarkSuccess();
+    cleanDeepSleep(DEVICE_DUTY_CYCLE_MS);
+  }
+
+  // Timed out waiting for publish acks (infra issues?). Don't burn battery.
+  if (millis() - publishStartMillis > PUBLISH_TIMEOUT_MS) {
+    Serial.printf("Timeout waiting to publish (%d published)\r\n", topicsPublished);
+    mqttClient.disconnect(false);
+    // If there is a failure to connect to infrastructure the idea is to assume
+    // something had gone wrong. It may be a momentary glitch, or it could be
+    // something like a power outage this battery powered device is not impacted
+    // by. So the idea is to progressively extend sleeps in an effort to save time
+    // while infrastructure is being recovered.
+    // See backoff.hpp
+    backoffMarkFailureAndSleep(); 
+  }
+  delay(50);
+*/
+
 
 }
