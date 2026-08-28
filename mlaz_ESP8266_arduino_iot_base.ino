@@ -161,6 +161,10 @@ void setupApConfigMode()
   Serial.print(F("AP hostname: "));
   Serial.println(configEspHostname);
   WiFi.softAP(configEspHostname);
+  // At full power, the device can experience brownouts. 
+  // When debugging, these look like random disconnects on USB.
+  // Reduce power to make this easier on a PC's USB port
+  WiFi.setOutputPower(15);
 
   // setup HTTP server and the HTML requests
   registerHtmlInterfaces();
